@@ -31,6 +31,7 @@ app.use(
       "http://localhost:5174",
       "http://localhost:5173",
       "https://spin-wheel-game-one.vercel.app",
+      "https://game1pro.com/",
     ],
     credentials: true,
   })
