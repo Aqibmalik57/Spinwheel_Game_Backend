@@ -1,35 +1,42 @@
 import express from "express";
 import {
-  ForgotPassword,
+  registerUser,
   loginUser,
   Logout,
   Myprofile,
-  regis,
+  ForgotPassword,
   ResetPassword,
   updateProfile,
-  // sendOtp,
-  // verifyOtp,
-  VerifyResetOtp,
 } from "../Controller/UserController.js";
 import { isUserLoggedin } from "../utils/Auth.js";
 import upload from "../utils/multer.js";
 
 const router = express.Router();
 
-router.post("/regis", regis);
-// router.post("/send-otp", sendOtp);
-// router.post("/verify-otp", verifyOtp);
-router.post("/loginUser", loginUser);
+// ✅ Register
+router.post("/register", registerUser);
+
+// ✅ Login
+router.post("/login", loginUser);
+
+// ✅ Logout
+router.post("/logout", Logout);
+
+// ✅ My Profile (protected)
 router.get("/profile", isUserLoggedin, Myprofile);
+
+// ✅ Update Profile (with image upload)
 router.put(
-  "/updateProfile/:id",
+  "/update-profile/:id",
   isUserLoggedin,
   upload.single("file"),
   updateProfile
 );
-router.post("/logout", Logout);
-router.post("/forgotpassword", ForgotPassword);
-router.post("/verify-reset-otp", VerifyResetOtp);
-router.post("/resetpassword/:token", ResetPassword);
+
+// ✅ Forgot Password
+router.post("/forgot-password", ForgotPassword);
+
+// ✅ Reset Password
+router.post("/reset-password/:token", ResetPassword);
 
 export default router;

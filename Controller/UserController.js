@@ -1,143 +1,123 @@
-import twilio from "twilio";
 import UserModel from "../Modal/UserModel.js";
 import Errorhandler from "../utils/ErrorHandling.js";
 import dotenv from "dotenv";
 import crypto from "crypto";
 import { v2 } from "cloudinary";
+import nodemailer from "nodemailer";
 
 dotenv.config();
 
-const otpStore = {};
+const transporter = nodemailer.createTransport({
+  service: "gmail", // or "smtp"
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
 
-const twilioClient = twilio(
-  process.env.TWILIO_SID,
-  process.env.TWILIO_AUTH_TOKEN
-);
-
-export const regis = async (req, res, next) => {
+// 📌 Register User (with welcome email)
+export const registerUser = async (req, res, next) => {
   try {
-    const { phone, password } = req.body;
+    const { email, password } = req.body;
 
-    if (!phone || !password) {
-      return next(new Errorhandler("Phone and password are required", 400));
+    if (!email || !password) {
+      return next(new Errorhandler("Email and password are required", 400));
     }
 
-    const existingUser = await UserModel.findOne({ phone });
+    const existingUser = await UserModel.findOne({ email });
     if (existingUser) {
       return next(new Errorhandler("User already exists", 409));
     }
 
-    const newUser = await UserModel.create({ phone, password });
-    const token = newUser.getJWTtoken();
+    // create new user (other fields will use default values from schema)
+    const user = await UserModel.create({
+      email,
+      password,
+    });
+
+    // send welcome mail
+    await transporter.sendMail({
+      from: `"Game1pro Support" <${process.env.SMTP_USER}>`,
+      to: user.email,
+      subject: "🚀 Welcome to Game1pro – Your Adventure Begins!",
+      html: `
+  <div style="font-family: Arial, sans-serif; background: #f4f7fb; padding: 30px;">
+    <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.1);">
+      
+      <!-- Header -->
+      <div style="background: linear-gradient(135deg,#3498db,#2c3e50); color: #fff; padding: 25px; text-align: center;">
+        <h1 style="margin: 0; font-size: 24px;">🎮 Welcome to Game1pro, ${
+          user.name
+        }!</h1>
+      </div>
+
+      <!-- Body -->
+      <div style="padding: 25px; color: #333;">
+        <p style="font-size: 16px; line-height: 1.6;">
+          We're thrilled to have you join the <strong>Game1pro Community</strong>!  
+          Your account has been created successfully and you're ready to start exploring exclusive features.
+        </p>
+
+        <h3 style="color: #3498db; margin-top: 20px;">✨ What’s next?</h3>
+        <ul style="padding-left: 20px; line-height: 1.6; font-size: 15px;">
+          <li>✅ <strong>Login</strong> and explore your personal dashboard.</li>
+          <li>🎯 Earn rewards and track your progress in real-time.</li>
+          <li>🚀 Be the first to enjoy upcoming updates and features.</li>
+        </ul>
+
+        <div style="text-align: center; margin: 30px 0;">
+          <a href="https://game1pro.com/login" 
+             style="display: inline-block; background: #3498db; color: #fff; padding: 14px 28px; font-size: 16px; border-radius: 6px; text-decoration: none; font-weight: bold;">
+            🔑 Login to Your Account
+          </a>
+        </div>
+
+        <p style="font-size: 15px; color: #555; text-align: center; line-height: 1.6;">
+          Need help? Our support team is always here for you – just reply to this email.  
+          <br><br>
+          Let’s make this an awesome journey together! 🎉
+        </p>
+      </div>
+
+      <!-- Footer -->
+      <div style="background: #f0f3f8; padding: 15px; text-align: center; font-size: 12px; color: #888;">
+        © ${new Date().getFullYear()} Game1pro. All rights reserved.  
+      </div>
+    </div>
+  </div>
+  `,
+    });
+
+    const token = user.getJWTtoken();
 
     res.status(201).json({
       success: true,
       message: "User registered successfully",
+      user,
       token,
     });
-  } catch (err) {
-    next(err);
+  } catch (error) {
+    console.error("Register Error:", error);
+    next(error);
   }
 };
 
-// export const sendOtp = async (req, res, next) => {
-//   const { phone, password } = req.body;
-
-//   if (!phone || !password) {
-//     return next(new Errorhandler("Phone and password are required", 400));
-//   }
-
-//   try {
-//     const existingUser = await UserModel.findOne({ phone });
-//     if (existingUser) {
-//       return next(new Errorhandler("User already exists", 409));
-//     }
-
-//     // Send OTP via Twilio Verify Service
-//     await twilioClient.verify.v2
-//       .services(process.env.TWILIO_VERIFY_SERVICE_SID)
-//       .verifications.create({
-//         to: phone.startsWith("+") ? phone : `+92${phone}`,
-//         channel: "sms",
-//       });
-
-//     otpStore[phone] = {
-//       password,
-//       expiresAt: Date.now() + 5 * 60 * 1000,
-//     };
-
-//     res.status(200).json({
-//       success: true,
-//       message: "OTP sent successfully",
-//     });
-//   } catch (error) {
-//     console.error("Error sending OTP:", error);
-//     res.status(500).json({ message: "Internal server error" });
-//   }
-// };
-
-// export const verifyOtp = async (req, res, next) => {
-//   const { phone, otp } = req.body;
-
-//   const record = otpStore[phone];
-//   if (!record) {
-//     return next(new Errorhandler("No OTP found. Please request again.", 400));
-//   }
-
-//   if (Date.now() > record.expiresAt) {
-//     delete otpStore[phone];
-//     return next(new Errorhandler("OTP has expired", 400));
-//   }
-
-//   try {
-//     const verificationCheck = await twilioClient.verify.v2
-//       .services(process.env.TWILIO_VERIFY_SERVICE_SID)
-//       .verificationChecks.create({
-//         to: phone.startsWith("+") ? phone : `+92${phone}`,
-//         code: otp,
-//       });
-
-//     if (verificationCheck.status !== "approved") {
-//       return next(new Errorhandler("Invalid or expired OTP", 400));
-//     }
-
-//     // ✅ Register the user
-//     const newUser = new UserModel({ phone, password: record.password });
-//     await newUser.save();
-//     const token = newUser.getJWTtoken();
-
-//     delete otpStore[phone];
-
-//     res
-//       .status(201)
-//       .cookie("token", token, {
-//         httpOnly: true,
-//         secure: process.env.NODE_ENV === "production",
-//         maxAge: 30 * 24 * 60 * 60 * 1000,
-//         sameSite: "None",
-//       })
-//       .json({
-//         message: "User registered successfully",
-//         user: newUser,
-//       });
-//   } catch (error) {
-//     console.error("OTP verification failed:", error);
-//     return res.status(500).json({ message: "Internal server error" });
-//   }
-// };
-
+// 📌 Login with email + password
 export const loginUser = async (req, res, next) => {
   try {
-    const { phone, password } = req.body;
+    const { email, password } = req.body;
 
-    const user = await UserModel.findOne({ phone }).select("+password");
+    if (!email || !password)
+      return next(new Errorhandler("Email and password required", 400));
+
+    const user = await UserModel.findOne({ email }).select("+password");
     if (!user) {
       return next(new Errorhandler("User not found", 404));
     }
 
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      return next(new Errorhandler("Invalid phone or password", 401));
+      return next(new Errorhandler("Invalid email or password", 401));
     }
 
     const token = user.getJWTtoken();
@@ -161,6 +141,7 @@ export const loginUser = async (req, res, next) => {
   }
 };
 
+// 📌 Logout
 export const Logout = async (req, res, next) => {
   try {
     res.cookie("token", "", {
@@ -179,6 +160,7 @@ export const Logout = async (req, res, next) => {
   }
 };
 
+// 📌 My Profile
 export const Myprofile = async (req, res, next) => {
   try {
     const user = req.user;
@@ -187,7 +169,7 @@ export const Myprofile = async (req, res, next) => {
       return next(new Errorhandler("User not logged in", 400));
     }
 
-    res.status(201).json({
+    res.status(200).json({
       success: true,
       user,
     });
@@ -196,77 +178,62 @@ export const Myprofile = async (req, res, next) => {
   }
 };
 
+// 📌 Forgot Password (send email with reset link)
 export const ForgotPassword = async (req, res, next) => {
-  const { phone } = req.body;
+  const { email } = req.body;
 
-  if (!phone) {
-    return next(new Errorhandler("Please enter a valid phone number", 400));
+  if (!email) {
+    return next(new Errorhandler("Please enter your email", 400));
   }
 
-  const user = await UserModel.findOne({ phone });
+  const user = await UserModel.findOne({ email });
   if (!user) {
-    return next(new Errorhandler("No account with this phone number", 404));
+    return next(new Errorhandler("No account with this email", 404));
   }
 
   try {
-    await twilioClient.verify.v2
-      .services(process.env.TWILIO_VERIFY_SERVICE_SID)
-      .verifications.create({
-        to: phone.startsWith("+") ? phone : `+92${phone}`,
-        channel: "sms",
-      });
-
-    res.status(200).json({
-      success: true,
-      message: `OTP sent to ${phone} for password reset`,
-    });
-  } catch (err) {
-    console.error("Twilio Verify Send Error:", err.message);
-    return next(new Errorhandler("Failed to send OTP", 500));
-  }
-};
-
-export const VerifyResetOtp = async (req, res, next) => {
-  const { phone, otp } = req.body;
-
-  if (!phone || !otp) {
-    return next(new Errorhandler("Phone and OTP are required", 400));
-  }
-
-  try {
-    const verificationCheck = await twilioClient.verify.v2
-      .services(process.env.TWILIO_VERIFY_SERVICE_SID)
-      .verificationChecks.create({
-        to: phone.startsWith("+") ? phone : `+92${phone}`,
-        code: otp,
-      });
-
-    if (verificationCheck.status !== "approved") {
-      return next(new Errorhandler("Invalid or expired OTP", 400));
-    }
-
-    const user = await UserModel.findOne({ phone });
-    if (!user) {
-      return next(new Errorhandler("User not found", 404));
-    }
-
     const rawToken = user.getResetPasswordToken();
     await user.save({ validateBeforeSave: false });
 
+    const resetUrl = `${req.protocol}://${req.get(
+      "host"
+    )}/api/v1/password/reset/${rawToken}`;
+
+    await transporter.sendMail({
+      from: `"Game1pro Support" <${process.env.SMTP_USER}>`,
+      to: user.email,
+      subject: "🔐 Password Reset Request",
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 20px;">
+          <h2 style="color: #2c3e50;">Password Reset Requested</h2>
+          <p>Hello ${user.name || "User"},</p>
+          <p>You requested a password reset. Please click the button below to reset your password:</p>
+          <a href="${resetUrl}" style="background: #3498db; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+            Reset Password
+          </a>
+          <p>This link will expire in 15 minutes.</p>
+          <hr>
+          <p style="font-size: 12px; color: #7f8c8d;">If you didn’t request this, please ignore this email.</p>
+        </div>
+      `,
+    });
+
     res.status(200).json({
       success: true,
-      message: "OTP verified, use this token to reset password",
-      resetToken: rawToken,
+      message: `Password reset link sent to ${user.email}`,
     });
-  } catch (error) {
-    console.error("OTP verification failed:", error.message);
-    return next(new Errorhandler("Failed to verify OTP", 500));
+  } catch (err) {
+    console.error("ForgotPassword Error:", err.message);
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save({ validateBeforeSave: false });
+    return next(new Errorhandler("Failed to send reset email", 500));
   }
 };
 
+// 📌 Reset Password
 export const ResetPassword = async (req, res, next) => {
   const token = req.params.token;
-
   const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
 
   const user = await UserModel.findOne({
@@ -297,13 +264,15 @@ export const ResetPassword = async (req, res, next) => {
   });
 };
 
+// 📌 Update Profile
 export const updateProfile = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name } = req.body;
+    const { name, phone } = req.body;
 
     const updateFields = {};
     if (name) updateFields.name = name;
+    if (phone) updateFields.phone = phone;
 
     // If image uploaded, convert to base64 and send to Cloudinary
     if (req.file) {
@@ -311,7 +280,7 @@ export const updateProfile = async (req, res) => {
       const dataURI = `data:${req.file.mimetype};base64,${b64}`;
 
       const cloudinaryRes = await v2.uploader.upload(dataURI, {
-        folder: "Game_profile_pics",
+        folder: "User_profile_pics",
       });
 
       updateFields.profilePicture = cloudinaryRes.secure_url;

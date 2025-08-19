@@ -14,7 +14,7 @@ const Userschema = new mongoose.Schema(
     email: {
       type: String,
       unique: true,
-      sparse: true,
+      required: [true, "Please enter your email"],
       validate: [validator.isEmail, "Please enter a valid email"],
     },
     coins: {
@@ -26,15 +26,16 @@ const Userschema = new mongoose.Schema(
     password: {
       type: String,
       required: true,
-      minlength: [8, "Password must be at least 8 characters long"],
+      minlength: [6, "Password must be at least 6 characters long"],
       select: false,
     },
     phone: {
       type: String,
-      required: true,
-      unique: true,
       minlength: [11, "Phone number must be at least 11 characters long"],
+      unique: false, // ✅ ensures no unique index is created
+      sparse: true, // ✅ allows multiple nulls
     },
+
     address: { type: String, default: null },
     isAdmin: { type: Boolean, default: false },
     profilePicture: { type: String, default: null },
