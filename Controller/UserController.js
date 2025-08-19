@@ -197,7 +197,7 @@ export const ForgotPassword = async (req, res, next) => {
     const rawToken = user.getResetPasswordToken();
     await user.save({ validateBeforeSave: false });
 
-    const resetUrl = `${req.protocol}://game1pro.com/forgot-password/${rawToken}`;
+    const resetUrl = `${req.protocol}://game1pro.com/reset-password/${rawToken}`;
 
     await transporter.sendMail({
       from: `"Game1pro Support" <${process.env.SMTP_USER}>`,
