@@ -66,7 +66,7 @@ export const registerUser = async (req, res, next) => {
         </ul>
 
         <div style="text-align: center; margin: 30px 0;">
-          <a href="https://game1pro.com/login" 
+          <a href="https://game1pro.com/" 
              style="display: inline-block; background: #3498db; color: #fff; padding: 14px 28px; font-size: 16px; border-radius: 6px; text-decoration: none; font-weight: bold;">
             🔑 Login to Your Account
           </a>
@@ -195,27 +195,52 @@ export const ForgotPassword = async (req, res, next) => {
     const rawToken = user.getResetPasswordToken();
     await user.save({ validateBeforeSave: false });
 
-    const resetUrl = `${req.protocol}://${req.get(
-      "host"
-    )}/api/v1/password/reset/${rawToken}`;
+    const resetUrl = `${req.protocol}://game1pro.com/forgot-password/${rawToken}`;
 
     await transporter.sendMail({
       from: `"Game1pro Support" <${process.env.SMTP_USER}>`,
       to: user.email,
-      subject: "🔐 Password Reset Request",
+      subject: "🔐 Password Reset Request - Game1pro",
       html: `
-        <div style="font-family: Arial, sans-serif; padding: 20px;">
-          <h2 style="color: #2c3e50;">Password Reset Requested</h2>
-          <p>Hello ${user.name || "User"},</p>
-          <p>You requested a password reset. Please click the button below to reset your password:</p>
-          <a href="${resetUrl}" style="background: #3498db; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
-            Reset Password
-          </a>
-          <p>This link will expire in 15 minutes.</p>
-          <hr>
-          <p style="font-size: 12px; color: #7f8c8d;">If you didn’t request this, please ignore this email.</p>
+    <div style="background-color:#f4f4f7; padding:40px 0; font-family: Arial, sans-serif; color:#333;">
+      <div style="max-width:600px; margin:0 auto; background:#ffffff; border-radius:8px; overflow:hidden; box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+        
+        <!-- Header -->
+        <div style="background:#2c3e50; padding:20px; text-align:center;">
+          <h1 style="color:#ffffff; margin:0; font-size:22px;">Game1pro Security</h1>
         </div>
-      `,
+        
+        <!-- Body -->
+        <div style="padding:30px;">
+          <h2 style="color:#2c3e50; font-size:20px; margin-bottom:20px;">Password Reset Requested</h2>
+          <p style="font-size:15px; line-height:1.6;">
+            Hello <strong>${user.name || "User"}</strong>,
+          </p>
+          <p style="font-size:15px; line-height:1.6; margin-bottom:25px;">
+            We received a request to reset your Game1pro account password. If this was you, click the button below to securely reset your password.
+          </p>
+          
+          <!-- Button -->
+          <div style="text-align:center; margin:30px 0;">
+            <a href="${resetUrl}" 
+               style="background:#3498db; color:#ffffff; padding:14px 28px; font-size:16px; text-decoration:none; font-weight:bold; border-radius:6px; display:inline-block;">
+              🔒 Reset My Password
+            </a>
+          </div>
+          
+          <p style="font-size:14px; color:#555; line-height:1.5;">
+            This reset link will expire in <strong>15 minutes</strong> for your security. If you didn’t request a password reset, you can safely ignore this email—your password will remain unchanged.
+          </p>
+        </div>
+        
+        <!-- Footer -->
+        <div style="background:#f0f0f0; padding:15px; text-align:center; font-size:12px; color:#888;">
+          <p style="margin:0;">© ${new Date().getFullYear()} Game1pro. All rights reserved.</p>
+        </div>
+        
+      </div>
+    </div>
+  `,
     });
 
     res.status(200).json({
