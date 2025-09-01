@@ -20,14 +20,12 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 8000;
 
-// Cloudinary config
 v2.config({
   cloud_name: process.env.Cloud_Name,
   api_key: process.env.Cloud_API_Key,
   api_secret: process.env.API_Secret_Key,
 });
 
-// Middleware
 app.use(express.json());
 app.use(cookieParser());
 app.use(
@@ -42,7 +40,6 @@ app.use(
   })
 );
 
-// API routes
 app.use("/api/v1", UserRoutes);
 
 // Test route
@@ -54,15 +51,13 @@ app.get("/api/v1/test", (req, res) => {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Serve static React files (Vite build folder)
-app.use(express.static(path.join(__dirname, "dist"))); // "dist" for Vite, "build" for CRA
+app.use(express.static(path.join(__dirname, "dist")));
 
 // SPA fallback: serve index.html for all non-API GET requests
 app.get(/^\/(?!api).*/, (req, res) => {
-  res.sendFile(path.join(__dirname, "dist", "index.html")); // "dist" for Vite, "build" for CRA
+  res.sendFile(path.join(__dirname, "dist", "index.html"));
 });
 
-// Error handler middleware
 app.use(Error);
 
 // Start server
@@ -71,7 +66,6 @@ const server = app.listen(PORT, () => {
   MDB();
 });
 
-// Unhandled Rejection
 process.on("unhandledRejection", (err) => {
   console.error("Unhandled Rejection:", err);
   server.close(() => {
