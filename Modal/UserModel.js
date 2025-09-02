@@ -6,6 +6,9 @@ import crypto from "crypto";
 
 const Userschema = new mongoose.Schema(
   {
+    googleId: {
+      type: String,
+    },
     userId: {
       type: String,
       unique: true,
@@ -25,17 +28,16 @@ const Userschema = new mongoose.Schema(
     },
     password: {
       type: String,
-      required: true,
+      sparse: true,
       minlength: [6, "Password must be at least 6 characters long"],
       select: false,
     },
     phone: {
       type: String,
       minlength: [11, "Phone number must be at least 11 characters long"],
-      unique: false, // ✅ ensures no unique index is created
-      sparse: true, // ✅ allows multiple nulls
+      unique: false,
+      sparse: true,
     },
-
     address: { type: String, default: null },
     isAdmin: { type: Boolean, default: false },
     profilePicture: { type: String, default: null },

@@ -3,9 +3,16 @@ import Errorhandler from "../utils/ErrorHandling.js";
 import dotenv from "dotenv";
 import crypto from "crypto";
 import { v2 } from "cloudinary";
+import { OAuth2Client } from "google-auth-library";
 import nodemailer from "nodemailer";
 
 dotenv.config();
+
+export const googleClient = new OAuth2Client(
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET,
+  "postmessage"
+);
 
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
@@ -17,13 +24,151 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+export const googleLogin = async (req, res, next) => {
+  const { code } = req.body;
+  if (!code) {
+    return next(new Errorhandler("Authorization code is required", 400));
+  }
+
+  try {
+    // 1. Exchange code for tokens
+    const { tokens } = await googleClient.getToken(code);
+    if (!tokens.id_token) {
+      return next(new Errorhandler("Missing ID token", 400));
+    }
+
+    // 2. Verify ID token
+    const ticket = await googleClient.verifyIdToken({
+      idToken: tokens.id_token,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+    const { email, name, sub: googleId } = payload;
+
+    if (!email || !name || !googleId) {
+      return next(new Errorhandler("Invalid Google user data", 400));
+    }
+
+    // 3. Find or create user
+    let user = await UserModel.findOne({ email });
+    let isNewUser = false;
+
+    if (!user) {
+      user = await UserModel.create({ name, email, googleId });
+      isNewUser = true;
+
+      // 🎉 Send Welcome Mail only for new users
+      await transporter.sendMail({
+        from: `"Game1pro" <${process.env.SMTP_USER}>`,
+        to: user.email,
+        subject: "🎮 Welcome to Game1Pro – Let's Start Winning!",
+        html: `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Welcome to Game1Pro</title>
+  </head>
+  <body style="margin:0; padding:0; font-family:'Segoe UI', Arial, sans-serif; background:#0f172a; color:#ffffff;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a; padding:0; margin:0;">
+      <tr>
+        <td align="center">
+          <!-- Main Container -->
+          <table width="650" cellpadding="0" cellspacing="0" style="background:#1e293b; border-radius:12px; overflow:hidden; margin:40px auto; box-shadow:0px 4px 18px rgba(0,0,0,0.4);">
+            
+            <!-- Header Banner -->
+            <tr>
+              <td style="background:linear-gradient(90deg,#6366f1,#3b82f6); padding:40px; text-align:center;">
+                <h1 style="margin:0; font-size:32px; color:#fff; letter-spacing:1px;">🎮 Welcome to <strong>Game1Pro</strong></h1>
+                <p style="margin:10px 0 0; font-size:16px; color:#f1f5f9;">
+                  Hey ${
+                    user.name || "Player"
+                  }, your journey to high winning games starts now!
+                </p>
+              </td>
+            </tr>
+            
+            <!-- Body -->
+            <tr>
+              <td style="padding:30px; text-align:center; color:#cbd5e1; font-size:16px; line-height:26px;">
+                <p>We’re thrilled to have you join <strong>Game1Pro</strong>!  
+                Get ready to dive into a world of exciting challenges,  
+                high winning games, and endless fun.</p>
+                <p>🎯 It’s time to test your luck and claim your rewards!</p>
+              </td>
+            </tr>
+            
+            <!-- CTA Button -->
+            <tr>
+              <td align="center" style="padding:20px 0;">
+                <a href="https://game1pro.com" 
+                   style="background:linear-gradient(90deg,#6366f1,#3b82f6); padding:14px 40px; text-decoration:none; color:#fff; font-size:18px; font-weight:bold; border-radius:40px; display:inline-block;">
+                  ▶ Start Playing Now
+                </a>
+              </td>
+            </tr>
+            
+            <!-- Support -->
+            <tr>
+              <td style="padding:30px; text-align:center; color:#94a3b8; font-size:14px; line-height:22px;">
+                <p>Need help with withdrawals or purchases?</p>
+                <p>📧 Email us anytime at  
+                  <a href="mailto:info@game1pro.com" style="color:#60a5fa; text-decoration:none; font-weight:bold;">info@game1pro.com</a>
+                </p>
+              </td>
+            </tr>
+            
+            <!-- Footer -->
+            <tr>
+              <td style="background:#0f172a; text-align:center; padding:20px; font-size:12px; color:#64748b;">
+                © ${new Date().getFullYear()} Game1Pro • All Rights Reserved
+              </td>
+            </tr>
+            
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`,
+      });
+    }
+
+    // 4. Generate JWT for your app
+    const jwtToken = user.getJWTtoken();
+
+    // 5. Send response + cookie
+    res
+      .status(200)
+      .cookie("token", jwtToken, {
+        expires: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000),
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "Lax",
+      })
+      .json({
+        success: true,
+        message: isNewUser
+          ? "Google signup successful"
+          : "Google login successful",
+        user,
+        token: jwtToken,
+      });
+  } catch (error) {
+    console.error("🚨 Google login error:", error);
+    return next(new Errorhandler("Failed to login with Google", 500));
+  }
+};
+
 // 📌 Register User (with welcome email)
 export const registerUser = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { email, username, password } = req.body;
 
-    if (!email || !password) {
-      return next(new Errorhandler("Email and password are required", 400));
+    if (!email || !username || !password) {
+      return next(
+        new Errorhandler("Email, username and password are required", 400)
+      );
     }
 
     const existingUser = await UserModel.findOne({ email });
@@ -31,63 +176,85 @@ export const registerUser = async (req, res, next) => {
       return next(new Errorhandler("User already exists", 409));
     }
 
-    // create new user (other fields will use default values from schema)
     const user = await UserModel.create({
       email,
+      name: username,
       password,
     });
 
     // send welcome mail
     await transporter.sendMail({
-      from: `"Game1pro Support" <${process.env.SMTP_USER}>`,
+      from: `"Game1pro" <${process.env.SMTP_USER}>`,
       to: user.email,
-      subject: "🚀 Welcome to Game1pro – Your Adventure Begins!",
-      html: `
-  <div style="font-family: Arial, sans-serif; background: #f4f7fb; padding: 30px;">
-    <div style="max-width: 600px; margin: auto; background: #ffffff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 6px rgba(0,0,0,0.1);">
-      
-      <!-- Header -->
-      <div style="background: linear-gradient(135deg,#3498db,#2c3e50); color: #fff; padding: 25px; text-align: center;">
-        <h1 style="margin: 0; font-size: 24px;">🎮 Welcome to Game1pro, ${
-          user.name
-        }!</h1>
-      </div>
-
-      <!-- Body -->
-      <div style="padding: 25px; color: #333;">
-        <p style="font-size: 16px; line-height: 1.6;">
-          We're thrilled to have you join the <strong>Game1pro Community</strong>!  
-          Your account has been created successfully and you're ready to start exploring exclusive features.
-        </p>
-
-        <h3 style="color: #3498db; margin-top: 20px;">✨ What’s next?</h3>
-        <ul style="padding-left: 20px; line-height: 1.6; font-size: 15px;">
-          <li>✅ <strong>Login</strong> and explore your personal dashboard.</li>
-          <li>🎯 Earn rewards and track your progress in real-time.</li>
-          <li>🚀 Be the first to enjoy upcoming updates and features.</li>
-        </ul>
-
-        <div style="text-align: center; margin: 30px 0;">
-          <a href="https://game1pro.com/" 
-             style="display: inline-block; background: #3498db; color: #fff; padding: 14px 28px; font-size: 16px; border-radius: 6px; text-decoration: none; font-weight: bold;">
-            🔑 Login to Your Account
-          </a>
-        </div>
-
-        <p style="font-size: 15px; color: #555; text-align: center; line-height: 1.6;">
-          Need help? Our support team is always here for you – just reply to this email.  
-          <br><br>
-          Let’s make this an awesome journey together! 🎉
-        </p>
-      </div>
-
-      <!-- Footer -->
-      <div style="background: #f0f3f8; padding: 15px; text-align: center; font-size: 12px; color: #888;">
-        © ${new Date().getFullYear()} Game1pro. All rights reserved.  
-      </div>
-    </div>
-  </div>
-  `,
+      subject: "🎮 Welcome to Game1Pro – Let's Start Winning!",
+      html: `<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Welcome to Game1Pro</title>
+  </head>
+  <body style="margin:0; padding:0; font-family:'Segoe UI', Arial, sans-serif; background:#0f172a; color:#ffffff;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="background:#0f172a; padding:0; margin:0;">
+      <tr>
+        <td align="center">
+          <!-- Main Container -->
+          <table width="650" cellpadding="0" cellspacing="0" style="background:#1e293b; border-radius:12px; overflow:hidden; margin:40px auto; box-shadow:0px 4px 18px rgba(0,0,0,0.4);">
+            
+            <!-- Header Banner -->
+            <tr>
+              <td style="background:linear-gradient(90deg,#6366f1,#3b82f6); padding:40px; text-align:center;">
+                <h1 style="margin:0; font-size:32px; color:#fff; letter-spacing:1px;">🎮 Welcome to <strong>Game1Pro</strong></h1>
+                <p style="margin:10px 0 0; font-size:16px; color:#f1f5f9;">
+                  Hey ${
+                    user.name || "Player"
+                  }, your journey to high winning games starts now!
+                </p>
+              </td>
+            </tr>
+            
+            <!-- Body -->
+            <tr>
+              <td style="padding:30px; text-align:center; color:#cbd5e1; font-size:16px; line-height:26px;">
+                <p>We’re thrilled to have you join <strong>Game1Pro</strong>!  
+                Get ready to dive into a world of exciting challenges,  
+                high winning games, and endless fun.</p>
+                <p>🎯 It’s time to test your luck and claim your rewards!</p>
+              </td>
+            </tr>
+            
+            <!-- CTA Button -->
+            <tr>
+              <td align="center" style="padding:20px 0;">
+                <a href="https://game1pro.com" 
+                   style="background:linear-gradient(90deg,#6366f1,#3b82f6); padding:14px 40px; text-decoration:none; color:#fff; font-size:18px; font-weight:bold; border-radius:40px; display:inline-block;">
+                  ▶ Start Playing Now
+                </a>
+              </td>
+            </tr>
+            
+            <!-- Support -->
+            <tr>
+              <td style="padding:30px; text-align:center; color:#94a3b8; font-size:14px; line-height:22px;">
+                <p>Need help with withdrawals or purchases?</p>
+                <p>📧 Email us anytime at  
+                  <a href="mailto:info@game1pro.com" style="color:#60a5fa; text-decoration:none; font-weight:bold;">info@game1pro.com</a>
+                </p>
+              </td>
+            </tr>
+            
+            <!-- Footer -->
+            <tr>
+              <td style="background:#0f172a; text-align:center; padding:20px; font-size:12px; color:#64748b;">
+                © ${new Date().getFullYear()} Game1Pro • All Rights Reserved
+              </td>
+            </tr>
+            
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`,
     });
 
     const token = user.getJWTtoken();

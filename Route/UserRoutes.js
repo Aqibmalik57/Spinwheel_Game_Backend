@@ -7,11 +7,14 @@ import {
   ForgotPassword,
   ResetPassword,
   updateProfile,
+  googleLogin,
 } from "../Controller/UserController.js";
 import { isUserLoggedin } from "../utils/Auth.js";
 import upload from "../utils/multer.js";
 
 const router = express.Router();
+
+router.post("/auth/google", googleLogin);
 
 // ✅ Register
 router.post("/register", registerUser);
