@@ -16,7 +16,6 @@ pids/
 *.pid.lock
 
 # Environment variables
-.env
 .env.*.local
 
 # OS-specific files
@@ -32,7 +31,6 @@ build/
 coverage/
 
 # Debugger configs
-.vscode/
 .idea/
 
 # Typescript cache
@@ -59,3 +57,4 @@ jest-output/
 # Misc
 *.tgz
 *.swp
+config.bat
